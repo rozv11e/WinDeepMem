@@ -1,6 +1,7 @@
 ﻿using static WinDeepMem.Imports.WinApi;
 using System.Diagnostics;
 using System.Text;
+using WinDeepMem.Imports.Structures;
 
 namespace WinDeepMem
 {
@@ -9,11 +10,18 @@ namespace WinDeepMem
         private readonly string _pathToDll;
         private readonly Process _process;
         private readonly Memory mem;
+        private readonly PEParser peParser;
+
+
         public Injector(Process targetProcess, string pathToDll)
         {
             _process = targetProcess;
             _pathToDll = pathToDll;
             mem = new Memory(targetProcess);
+
+
+            var rawImage = File.ReadAllBytes(pathToDll);
+            peParser = new PEParser(rawImage);
         }
 
         public bool InjectDll()
@@ -113,12 +121,121 @@ namespace WinDeepMem
         }
 
 
-        //public bool ManualMapping()
-        //{
-        //    byte[] dll = File.ReadAllBytes(_pathToDll);
+        public bool MapImage(byte[] rawImage)
+        {
 
-        //    var pReader = new ProcessReader();
-        //}
+            // Get headers
+            var dosHeader = peParser.DosHeader;
+            var ntHeaders = peParser.NtHeaders;
+            var optionalHeader = ntHeaders.OptionalHeader;
+            var fileHeader = ntHeaders.FileHeader;
+
+            var imageBase = optionalHeader.ImageBase;
+            var entryPoint = optionalHeader.AddressOfEntryPoint;
+            var remoteSize = optionalHeader.SizeOfImage;
+            
+            // Create buffer for alloc
+            var buffer = new byte[remoteSize];
+
+            // Move headers to buffer
+            Array.Copy(rawImage, buffer, optionalHeader.SizeOfHeaders);
+
+            // Print - MZ
+            var mz = new byte[2];
+            Array.Copy(buffer, mz, 2);
+            Console.WriteLine(Encoding.UTF8.GetString(mz));
+
+
+            int sectionHeadersOffset = dosHeader.e_lfanew
+                                       + 4
+                                       + 20
+                                       + ntHeaders.FileHeader.SizeOfOptionalHeader;
+
+            // Move sections
+            for (int i = 0; i < peParser.NumberOfSections; i++)
+            {
+                var offset = sectionHeadersOffset + i * 40;
+                var section = peParser.ReadStruct<IMAGE_SECTION_HEADER>(rawImage, offset);
+
+                // Print: Name, VirtualAddress, VirtualSize, PointerToRawData, SizeOfRawData
+                Console.WriteLine(section.SectionName);
+                // memory:
+                Console.WriteLine(section.VirtualAddress.ToString("X"));
+                Console.WriteLine(section.VirtualSize.ToString("X"));
+                // file:
+                Console.WriteLine(section.PointerToRawData.ToString("X"));
+                Console.WriteLine(section.SizeOfRawData.ToString("X"));
+                Console.WriteLine();
+
+                Array.Copy(
+                    rawImage, // From
+                    section.PointerToRawData, // offset in file
+                    buffer, // To
+                    section.VirtualAddress, // offset in memory
+                    section.SizeOfRawData); // size of bytes to copy
+            }
+
+            // Alloc
+            var allocatedBase = mem.AllocateMemory((uint)buffer.Length);
+            Console.WriteLine("Allocated memory: 0x" + allocatedBase.ToString("X"));
+            mem.WriteBytes(allocatedBase, buffer);
+            // Check alloc
+            var dllBytes = mem.ReadBytes(allocatedBase, 10);
+            Console.WriteLine("BytesWrited: " + BitConverter.ToString(dllBytes));
+
+            // Relocations
+            Console.WriteLine("Relocations");
+            IMAGE_DATA_DIRECTORY relocs = peParser.GetDirectory(5);
+            Console.WriteLine(relocs.VirtualAddress.ToString("X"));
+            Console.WriteLine(relocs.Size.ToString("X"));
+
+            var delta = (int)(allocatedBase - optionalHeader.ImageBase);
+
+            var currentBlock = allocatedBase + relocs.VirtualAddress;
+
+            while (true)
+            {
+                // Read block header
+                var block = mem.ReadStruct<IMAGE_BASE_RELOCATION>((nint)(currentBlock));
+                
+                if (block.SizeOfBlock == 0) 
+                    break;
+
+                var pageVA = block.VirtualAddress;
+                var count = (block.SizeOfBlock - 8) / 2; // Count of TypeOffset
+
+                var entry = currentBlock + 8; // 8 - cuz our header (pageVA + sizeOfBlock) = 8 byte
+
+                for (int i = 0; i < count; i++)
+                {
+                    ushort typeOffset = mem.ReadUShort((IntPtr)entry + i * 2);
+
+                    // WORD Type   : 4;
+                    // WORD Offset : 12; 
+                    int type = typeOffset >> 12; 
+                    int offset = typeOffset & 0xFFF;
+
+                    if (type == 0 || type == 10) continue; // 10 - x64, IMAGE_REL_BASED_ABSOLUTE - 0, 3 - IMAGE_REL_BASED_HIGHLOW
+
+                    // Patch reloc addr
+                    var patchAddr = allocatedBase + block.VirtualAddress + offset;
+                    var value = mem.ReadInt32((IntPtr)patchAddr);
+                    if (type == 0x3) // IMAGE_REL_BASED_HIGHLOW
+                    {
+                        mem.WriteBytes((nint)patchAddr, BitConverter.GetBytes(value + delta));
+                    }
+                }
+
+                // Get the next block
+                currentBlock += block.SizeOfBlock;
+            }
+
+            // IAT
+            // TLS
+            // Execute - createRemoteThread or thread hijacking
+
+            return true;
+        }
 
         // TODO: Unload
     }

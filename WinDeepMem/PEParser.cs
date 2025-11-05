@@ -178,7 +178,7 @@ namespace WinDeepMem
         }
 
 
-        private T ReadStruct<T>(byte[] data, int offset) where T : struct
+        public T ReadStruct<T>(byte[] data, int offset) where T : struct
         {
             int size = Marshal.SizeOf<T>();
 

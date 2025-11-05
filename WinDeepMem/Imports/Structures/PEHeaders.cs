@@ -133,4 +133,11 @@ namespace WinDeepMem.Imports.Structures
     }
     // Всего = 40 байт
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct IMAGE_BASE_RELOCATION
+    {
+        public uint VirtualAddress;  // RVA начала блока
+        public uint SizeOfBlock;     // размер блока, включая заголовок и массив Type/Offset
+    }
+
 }
