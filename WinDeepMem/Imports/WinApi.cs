@@ -1,8 +1,9 @@
 ﻿using System.Runtime.InteropServices;
+using System.Text;
 
 namespace WinDeepMem.Imports
 {
-    internal unsafe class WinApi
+    public unsafe class WinApi
     {
         [Flags]
         public enum ProcessAccessFlags : uint
@@ -103,11 +104,25 @@ namespace WinDeepMem.Imports
         [DllImport("kernel32.dll")]
         public static extern IntPtr LoadLibrary(string lpFileName);
 
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool FreeLibrary(IntPtr hModule);
+
         [DllImport("kernel32.dll")]
         public static extern IntPtr GetModuleHandle(string lpModuleName);
 
+        [DllImport("psapi.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern uint GetModuleBaseName(
+        IntPtr hProcess,
+        IntPtr hModule,
+        StringBuilder lpBaseName,
+        uint nSize);
+
         [DllImport("kernel32.dll")]
         public static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
+
+        [DllImport("kernel32.dll", EntryPoint = "GetProcAddress")]
+        public static extern IntPtr GetProcAddressOrdinal(IntPtr hModule, IntPtr ordinal);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
@@ -169,6 +184,13 @@ namespace WinDeepMem.Imports
             THREAD_ALL_ACCESS = 0x1F03FF
         }
 
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern uint SuspendThread(IntPtr hThread);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern uint ResumeThread(IntPtr hThread);
+
+
         [DllImport("kernel32.dll")]
         public static extern IntPtr OpenThread(
             uint dwDesiredAccess,
@@ -181,6 +203,112 @@ namespace WinDeepMem.Imports
         [DllImport("ntdll.dll")]
         public static extern int NtResumeThread(IntPtr threadHandle, out uint previousSuspendCount);
 
-        public const uint THREAD_SUSPEND_RESUME = 0x0002;
+        public static uint THREAD_SUSPEND_RESUME = 0x0002;
+        public static uint THREAD_GET_CONTEXT = 0x0008;
+        public static uint THREAD_SET_CONTEXT = 0x0010;
+
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern IntPtr CreateToolhelp32Snapshot(uint dwFlags, uint th32ProcessId);
+
+        public static uint TH32CS_SNAPHEAPLIST = 0x00000001; // Снимок heap-ов процесса
+        public static uint TH32CS_SNAPPROCESS = 0x00000002; // Снимок процессов
+        public static uint TH32CS_SNAPTHREAD = 0x00000004; // Снимок потоков
+        public static uint TH32CS_SNAPMODULE = 0x00000008; // Снимок модулей
+        public static uint TH32CS_SNAPMODULE32 = 0x00000010; // 32-bit модули
+        public static uint TH32CS_SNAPALL =
+            TH32CS_SNAPHEAPLIST |
+            TH32CS_SNAPPROCESS |
+            TH32CS_SNAPTHREAD |
+            TH32CS_SNAPMODULE;   // Все основные типы снимков
+
+        public static uint TH32CS_INHERIT = 0x80000000; // Наследование снимка
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool Thread32First(IntPtr hSnapshot, ref THREADENTRY32 lpte);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool Thread32Next(IntPtr hSnapshot, ref THREADENTRY32 lpte);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct THREADENTRY32
+        {
+            public uint dwSize;
+            public uint cntUsage;
+            public uint th32ThreadID;
+            public uint th32OwnerProcessID;
+            public int tpBasePri;
+            public int tpDeltaPri;
+            public uint dwFlags;
+        }
+
+        // Thread context
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct CONTEXT64
+        {
+            public ulong P1Home;
+            public ulong P2Home;
+            public ulong P3Home;
+            public ulong P4Home;
+            public ulong P5Home;
+            public ulong P6Home;
+
+            public uint ContextFlags;
+            public uint MxCsr;
+
+            public ushort SegCs;
+            public ushort SegDs;
+            public ushort SegEs;
+            public ushort SegFs;
+            public ushort SegGs;
+            public ushort SegSs;
+            public uint EFlags;
+
+            public ulong Dr0;
+            public ulong Dr1;
+            public ulong Dr2;
+            public ulong Dr3;
+            public ulong Dr6;
+            public ulong Dr7;
+
+            public ulong Rax;
+            public ulong Rcx;
+            public ulong Rdx;
+            public ulong Rbx;
+            public ulong Rsp;
+            public ulong Rbp;
+            public ulong Rsi;
+            public ulong Rdi;
+            public ulong R8;
+            public ulong R9;
+            public ulong R10;
+            public ulong R11;
+            public ulong R12;
+            public ulong R13;
+            public ulong R14;
+            public ulong R15;
+
+            public ulong Rip;
+        }
+
+        public const uint CONTEXT_CONTROL = 0x00100001;   // RIP/RSP/RBP
+        public const uint CONTEXT_INTEGER = 0x00100002;   // RAX/RBX/etc
+        public const uint CONTEXT_SEGMENTS = 0x00000004;
+
+        public const uint CONTEXT_FULL = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS;
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool GetThreadContext(IntPtr hThread, ref CONTEXT64 lpContext);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool SetThreadContext(IntPtr hThread, ref CONTEXT64 lpContext);
+
+        public static uint THREAD_QUERY_INFORMATION = 0x0040;
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern int GetThreadPriority(IntPtr hThread);
+
+
     }
 }

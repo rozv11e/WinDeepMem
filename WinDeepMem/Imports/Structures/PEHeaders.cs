@@ -140,4 +140,14 @@ namespace WinDeepMem.Imports.Structures
         public uint SizeOfBlock;     // размер блока, включая заголовок и массив Type/Offset
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct IMAGE_IMPORT_DESCRIPTOR
+    {
+        public uint OriginalFirstThunk;   // RVA до INT (Import Name Table)
+        public uint TimeDateStamp;        // Время компиляции или 0
+        public uint ForwarderChain;       // Индекс форвардеров или -1
+        public uint Name;                 // RVA строки с именем DLL
+        public uint FirstThunk;           // RVA до IAT (Import Address Table)
+    }
+
 }

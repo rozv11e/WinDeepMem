@@ -7,11 +7,11 @@ using static WinDeepMem.Imports.WinApi;
 
 namespace WinDeepMem
 {
-    public unsafe class ProcessReader
+    public unsafe class PEReader // Read PE in memory
     {
         private readonly Process process;
         private readonly Memory memory;
-        public ProcessReader(Process process)
+        public PEReader(Process process)
         {
             this.process = process;
             memory = new Memory(process);
@@ -90,6 +90,22 @@ namespace WinDeepMem
         }
 
         #region LDR
+
+        public LDR_DATA_TABLE_ENTRY GetModule(string name)
+        {
+            string target = name.ToLower();
+
+            foreach (var module in GetLoadedModules())
+            {
+                string dllName = ReadUnicodeString(module.BaseDllName).ToLower();
+                Console.WriteLine($"|LDR|DLL_NAME|{dllName}");
+                if (dllName == target)
+                    return module;
+            }
+
+            return new LDR_DATA_TABLE_ENTRY();
+        }
+
         public IEnumerable<LDR_DATA_TABLE_ENTRY> GetLoadedModules()
         {
             List<LDR_DATA_TABLE_ENTRY> moudleList = new List<LDR_DATA_TABLE_ENTRY>();
@@ -152,13 +168,6 @@ namespace WinDeepMem
         } // TODO: Add ldr remove // Manipulate PEB to hide Loaded DLL - https://medium.com/@s12deff/manipulate-peb-to-hide-loaded-dll-1f7c54507a43
         #endregion
 
-        const int IMAGE_DIRECTORY_ENTRY_TLS = 9;
-
-
-        public void ParseHeaders() // TODO:
-        {
-
-        }
 
         public void Test()
         {

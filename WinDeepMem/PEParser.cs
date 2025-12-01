@@ -1,22 +1,25 @@
-﻿using System.Reflection.PortableExecutable;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Text;
 using WinDeepMem.Imports.Structures;
 
 
 namespace WinDeepMem
 {
-    public class PEParser
+    public class PEParser // Read PE from file
     {
         private byte[] _fileBytes;
 
         public PEParser(byte[] fileBytes)
         {
             _fileBytes = fileBytes;
+
+
+            // TODO: _dosHeader = ReadStruct<IMAGE_DOS_HEADER>(_fileBytes, 0); -> add private fields
         }
 
         public bool Is32Bit => NtHeaders.OptionalHeader.Magic == 0x10B;
         public bool Is64Bit => NtHeaders.OptionalHeader.Magic == 0x20B;
+        public uint PtrSize => Is32Bit ? 4u : 8u;
 
 
         public IMAGE_DOS_HEADER DosHeader
@@ -29,27 +32,64 @@ namespace WinDeepMem
             get { return ReadStruct<IMAGE_NT_HEADERS32>(_fileBytes, DosHeader.e_lfanew); }
         }
 
-        public uint ImageBase
+        public IMAGE_NT_HEADERS64 NtHeaders64
         {
-            get { return NtHeaders.OptionalHeader.ImageBase; }
+            get { return ReadStruct<IMAGE_NT_HEADERS64>(_fileBytes, DosHeader.e_lfanew); }
+        }
+
+        public ulong ImageBase
+        {
+            get
+            {
+                if (Is32Bit)
+                {
+                    return NtHeaders.OptionalHeader.ImageBase;
+                }
+                
+                return NtHeaders64.OptionalHeader.ImageBase;
+            }
         }
 
         public uint SizeOfImage
         {
-            get { return NtHeaders.OptionalHeader.SizeOfImage; }
+            get
+            {
+                if (Is32Bit)
+                {
+                    return NtHeaders.OptionalHeader.SizeOfImage;
+                }
+
+                return NtHeaders64.OptionalHeader.SizeOfImage;
+            }
         }
 
         public uint EntryPoint
         {
-            get { return NtHeaders.OptionalHeader.AddressOfEntryPoint; }
+            get
+            {
+                if (Is32Bit)
+                {
+                    return NtHeaders.OptionalHeader.AddressOfEntryPoint;
+                }
+
+                return NtHeaders64.OptionalHeader.AddressOfEntryPoint;
+            }
         }
 
         public uint NumberOfSections
         {
-            get { return NtHeaders.FileHeader.NumberOfSections; }
+            get
+            {
+                if (Is32Bit)
+                {
+                    return NtHeaders.FileHeader.NumberOfSections;
+                }
+
+                return NtHeaders64.FileHeader.NumberOfSections;
+            }
         }
 
-        // 12 - IAT; 9 - TLS; 5 - reloc;
+        // 1,12 - IAT; 5 - relocs; // IMAGE_DIRECTORY_ENTRY_TLS = 9;
         public IMAGE_DATA_DIRECTORY GetDirectory(int index)
         {
             if (index < 0 || index >= 16)
@@ -57,19 +97,34 @@ namespace WinDeepMem
 
             var dir = new IMAGE_DATA_DIRECTORY();
 
-            var opt = NtHeaders.OptionalHeader;
+            if (Is32Bit)
+            {
+                var opt32 = NtHeaders.OptionalHeader;
 
+                unsafe
+                {
+                    uint* ptr = opt32.DataDirectory;
+                    dir.VirtualAddress = ptr[index * 2];
+                    dir.Size = ptr[index * 2 + 1];
+                }
+
+                return dir;
+            }
+
+            var opt64 = NtHeaders64.OptionalHeader;
             unsafe
             {
-                uint* ptr = opt.DataDirectory;
+                uint* ptr = opt64.DataDirectory;
                 dir.VirtualAddress = ptr[index * 2];
                 dir.Size = ptr[index * 2 + 1];
             }
 
+            Console.WriteLine($"DataDir:VirtAddr: {dir.VirtualAddress:X}");
+            Console.WriteLine($"DataDir:Size: {dir.Size:X}");
             return dir;
         }
 
-        public byte[] GetSectionData(int index, bool asImage = true)
+        private byte[] GetSectionData(int index, bool asImage = true)
         {
             if (index < 0 || index >= NumberOfSections)
                 throw new ArgumentOutOfRangeException(nameof(index));
@@ -110,9 +165,8 @@ namespace WinDeepMem
             }
         }
 
-
         //   - GetImports()
-        public void Parse()
+        private void Parse()
         {
             var bytes = _fileBytes;
             var dosHeader = DosHeader;

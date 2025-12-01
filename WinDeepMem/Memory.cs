@@ -10,19 +10,19 @@ namespace WinDeepMem
 {
     public unsafe class Memory
     {
-        private readonly Process process;
+        public readonly Process _process;
         public Memory(Process process)
         {
-            this.process = process;
+            this._process = process;
         }
 
         public IntPtr GetModuleBase(string module)
         {
-            foreach (ProcessModule item in process.Modules)
+            foreach (ProcessModule item in _process.Modules)
             {
                 if (item.ModuleName == module)
                 {
-                    return item.BaseAddress;
+                    return item.BaseAddress; 
                 }
             }
             return IntPtr.Zero;
@@ -98,6 +98,12 @@ namespace WinDeepMem
             return value;
         }
 
+        public ushort ReadUShort(nint address)
+        {
+            Read<ushort>(address, out var value);
+            return value;
+        }
+
         public Vector3 ReadVec3(IntPtr MemoryAddress)
         {
             float x = ReadFloat(MemoryAddress);
@@ -113,7 +119,7 @@ namespace WinDeepMem
 
             fixed (byte* pBuffer = buffer)
             {
-                if (ReadProcessMemory(process.Handle, address, pBuffer, length, out _))
+                if (ReadProcessMemory(_process.Handle, address, pBuffer, length, out _))
                 {
                     return buffer;
                 }
@@ -185,7 +191,7 @@ namespace WinDeepMem
 
             fixed (byte* pBuffer = new byte[size])
             {
-                if (ReadProcessMemory(process.Handle, MemoryAddress, pBuffer, (uint)size, out var _))
+                if (ReadProcessMemory(_process.Handle, MemoryAddress, pBuffer, (uint)size, out var _))
                 {
                     value = *(T*)pBuffer;
                     return true;
@@ -206,7 +212,7 @@ namespace WinDeepMem
                 *(T*)pBuffer = value;
             }
 
-            return WriteProcessMemory(process.Handle, address, buffer, size, out _);
+            return WriteProcessMemory(_process.Handle, address, buffer, size, out _);
         }
 
         public bool WriteFloat(IntPtr address, float value)
@@ -216,7 +222,7 @@ namespace WinDeepMem
 
         public bool WriteBytes(IntPtr address, byte[] newbytes)
         {
-            return WriteProcessMemory(process.Handle, address, newbytes, (uint)newbytes.Length, out var _);
+            return WriteProcessMemory(_process.Handle, address, newbytes, (uint)newbytes.Length, out var _);
         }
 
         public bool ZeroMemory(IntPtr address, int size)
@@ -233,11 +239,11 @@ namespace WinDeepMem
 
             uint oldProtect;
 
-            var status = NtProtectVirtualMemory(process.Handle, ref address, ref size, (uint)MemoryProtectionType.PAGE_READWRITE, out oldProtect);
+            var status = NtProtectVirtualMemory(_process.Handle, ref address, ref size, (uint)MemoryProtectionType.PAGE_READWRITE, out oldProtect);
             if (status == 0)
             {
                 Write<T>(address, data);
-                NtProtectVirtualMemory(process.Handle, ref address, ref size, oldProtect, out _);
+                NtProtectVirtualMemory(_process.Handle, ref address, ref size, oldProtect, out _);
                 return true;
             }
 
@@ -247,7 +253,7 @@ namespace WinDeepMem
         // TODO: Nt + Check XMemory
         public bool AllocateMemory(uint size, IntPtr address)
         {
-            var res = VirtualAllocEx(process.Handle,
+            var res = VirtualAllocEx(_process.Handle,
                 address, size,
                 (uint)MemoryAllocationType.MEM_COMMIT | (uint)MemoryAllocationType.MEM_RESERVE,
                 (uint)MemoryProtectionType.PAGE_EXECUTE_READWRITE);
@@ -257,7 +263,7 @@ namespace WinDeepMem
 
         public IntPtr AllocateMemory(uint size)
         {
-            return VirtualAllocEx(process.Handle,
+            return VirtualAllocEx(_process.Handle,
                 IntPtr.Zero, size,
                 (uint)MemoryAllocationType.MEM_COMMIT | (uint)MemoryAllocationType.MEM_RESERVE,
             (uint)MemoryProtectionType.PAGE_EXECUTE_READWRITE);
@@ -265,17 +271,8 @@ namespace WinDeepMem
 
         public bool FreeMemory(IntPtr address)
         {
-            return VirtualFreeEx(process.Handle, address, 0, MemoryFreeType.MEM_RELEASE);
+            return VirtualFreeEx(_process.Handle, address, 0, MemoryFreeType.MEM_RELEASE);
         }
-
-        //public uint Execute()
-        //{
-        //    // lock
-        //    Write<uint>();
-
-        //}
-
-
 
         private const int FASM_MEMORY_SIZE = 8192;
         private const int FASM_PASSES = 100;
@@ -313,19 +310,20 @@ namespace WinDeepMem
                             uint oldProtect = 0;
                             IntPtr size = (IntPtr)len;
 
-                            NtProtectVirtualMemory(process.Handle, ref address, ref size, PAGE_EXECUTE_READWRITE, out oldProtect);
-                            var status = WriteProcessMemory(process.Handle, address, bytesToWrite, (uint)len, out _);
-                            NtProtectVirtualMemory(process.Handle, ref address, ref size, oldProtect, out _);
+                            NtProtectVirtualMemory(_process.Handle, ref address, ref size, PAGE_EXECUTE_READWRITE, out oldProtect);
+                            var status = WriteProcessMemory(_process.Handle, address, bytesToWrite, (uint)len, out _);
+                            NtProtectVirtualMemory(_process.Handle, ref address, ref size, oldProtect, out _);
 
                             return status;
                         }
 
-                        return WriteProcessMemory(process.Handle, address, bytesToWrite, (uint)len, out _);
+                        return WriteProcessMemory(_process.Handle, address, bytesToWrite, (uint)len, out _);
                     }
                     else
                         return false;
                 }
             }
         }
+
     }
 }

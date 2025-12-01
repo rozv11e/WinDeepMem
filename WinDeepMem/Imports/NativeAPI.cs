@@ -72,5 +72,8 @@ namespace WinDeepMem.Imports
 
             public IntPtr OutputData { get; set; }
         }
+
+        [DllImport("psapi.dll", CallingConvention = CallingConvention.StdCall, SetLastError = true)]
+        public static extern int EnumProcessModules(IntPtr hProcess, [Out] ulong lphModule, uint cb, out uint lpcbNeeded);
     }
 }
