@@ -203,11 +203,6 @@ namespace WinDeepMem.Imports
         [DllImport("ntdll.dll")]
         public static extern int NtResumeThread(IntPtr threadHandle, out uint previousSuspendCount);
 
-        public static uint THREAD_SUSPEND_RESUME = 0x0002;
-        public static uint THREAD_GET_CONTEXT = 0x0008;
-        public static uint THREAD_SET_CONTEXT = 0x0010;
-
-
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern IntPtr CreateToolhelp32Snapshot(uint dwFlags, uint th32ProcessId);
 
@@ -295,6 +290,7 @@ namespace WinDeepMem.Imports
         public const uint CONTEXT_CONTROL = 0x00100001;   // RIP/RSP/RBP
         public const uint CONTEXT_INTEGER = 0x00100002;   // RAX/RBX/etc
         public const uint CONTEXT_SEGMENTS = 0x00000004;
+        public static uint CONTEXT_ALL = 0x1003F;
 
         public const uint CONTEXT_FULL = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS;
 
@@ -304,10 +300,27 @@ namespace WinDeepMem.Imports
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool SetThreadContext(IntPtr hThread, ref CONTEXT64 lpContext);
 
+        [DllImport("ntdll.dll", SetLastError = true)]
+        public static extern int NtGetContextThread(
+            IntPtr ThreadHandle,
+            IntPtr Context // pointer to your CONTEXT struct
+        );
+
+        [DllImport("ntdll.dll", SetLastError = true)]
+        public static extern int NtSetContextThread(
+            IntPtr ThreadHandle,
+            IntPtr Context
+        );
+
+
         public static uint THREAD_QUERY_INFORMATION = 0x0040;
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern int GetThreadPriority(IntPtr hThread);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern uint QueueUserAPC(IntPtr pfnAPC, IntPtr hThread, UIntPtr dwData);
+
 
 
     }

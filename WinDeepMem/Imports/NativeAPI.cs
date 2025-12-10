@@ -3,7 +3,7 @@ using WinDeepMem.Imports.Structures;
 
 namespace WinDeepMem.Imports
 {
-    internal class NativeAPI
+    public class NativeAPI
     {
         public enum THREADINFOCLASS
         {
